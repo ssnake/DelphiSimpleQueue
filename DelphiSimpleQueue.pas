@@ -12,7 +12,10 @@ type
 
   TSimpleQueueTask = class
   public
-    procedure execute(AOnComplete: TSQTOnComplete<TSimpleQueueTask>); virtual; abstract;
+    procedure Execute(AOnComplete: TSQTOnComplete<TSimpleQueueTask>); virtual;
+        abstract;
+    procedure ExecuteWrapper(AOnComplete: TSQTOnComplete<TSimpleQueueTask>);
+        virtual;
   end;
 
   TSimpleQueue<T: TSimpleQueueTask> = class
@@ -30,6 +33,12 @@ type
     destructor Destroy; override;
     procedure Add(ATask: T);
     property OnComplete: TSQTOnComplete<T> read FOnComplete write FOnComplete;
+  end;
+
+  TSimpleQueueThreadTask = class(TSimpleQueueTask)
+  public
+    procedure ExecuteWrapper(AOnComplete: TSQTOnComplete<TSimpleQueueTask>);
+        override;
   end;
 
 implementation
@@ -81,7 +90,7 @@ begin
   end;
 
   if Assigned(task) then
-    task.execute(OnInternalTaskComplete);
+    task.executeWrapper(OnInternalTaskComplete);
 
 
 
@@ -116,6 +125,21 @@ begin
     FCS.Leave;
   end;
   ExecuteTask;
+end;
+
+procedure TSimpleQueueTask.ExecuteWrapper(AOnComplete:
+    TSQTOnComplete<TSimpleQueueTask>);
+begin
+  Execute(AOnComplete);
+end;
+
+procedure TSimpleQueueThreadTask.ExecuteWrapper(AOnComplete:
+    TSQTOnComplete<TSimpleQueueTask>);
+begin
+  TThread.CreateAnonymousThread(procedure()
+  begin
+    Execute(AOnComplete);
+  end).Start;
 end;
 
 end.
