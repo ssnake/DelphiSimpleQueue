@@ -24,7 +24,8 @@ type
     FCurrentTask: T;
     FOnComplete: TSQTOnComplete<T>;
     FList: TList<T>;
-    procedure ExecuteTask;
+    procedure ExecuteTask; virtual;
+    procedure InternalExecuteTask;
     function GetNextTask: T;
     procedure OnInternalTaskComplete(sender: TSimpleQueueTask; ASuccess: boolean;
         const AMsg: string);
@@ -39,6 +40,13 @@ type
   public
     procedure ExecuteWrapper(AOnComplete: TSQTOnComplete<TSimpleQueueTask>);
         override;
+  end;
+
+  TThreadSimpleQueue<T: TSimpleQueueTask> = class(TSimpleQueue<T>)
+  private
+    procedure ExecuteTask; override;
+  public
+    constructor Create(AOnComplete: TSQTOnComplete<T>);
   end;
 
 implementation
@@ -71,6 +79,11 @@ begin
 end;
 
 procedure TSimpleQueue<T>.ExecuteTask;
+begin
+  InternalExecuteTask;
+end;
+
+procedure TSimpleQueue<T>.InternalExecuteTask;
 var
   task: T;
 begin
@@ -140,6 +153,22 @@ begin
   begin
     Execute(AOnComplete);
   end).Start;
+end;
+
+constructor TThreadSimpleQueue<T>.Create(AOnComplete: TSQTOnComplete<T>);
+begin
+  inherited;
+
+end;
+
+procedure TThreadSimpleQueue<T>.ExecuteTask;
+begin
+  TThread.CreateAnonymousThread(procedure()
+  begin
+    InternalExecuteTask;
+  end).Start;
+
+
 end;
 
 end.
