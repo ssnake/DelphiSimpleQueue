@@ -25,6 +25,7 @@ type
     FOnComplete: TSQTOnComplete<T>;
     FList: TList<T>;
     procedure ExecuteTask; virtual;
+    function GetCount: Integer;
     procedure InternalExecuteTask;
     function GetNextTask: T;
     procedure OnInternalTaskComplete(sender: TSimpleQueueTask; ASuccess: boolean;
@@ -33,6 +34,8 @@ type
     constructor Create(AOnComplete: TSQTOnComplete<T>);
     destructor Destroy; override;
     procedure Add(ATask: T);
+    procedure Clear;
+    property Count: Integer read GetCount;
     property OnComplete: TSQTOnComplete<T> read FOnComplete write FOnComplete;
   end;
 
@@ -50,6 +53,10 @@ type
   end;
 
 implementation
+
+uses
+  SysUtils
+  ;
 
 constructor TSimpleQueue<T>.Create(AOnComplete: TSQTOnComplete<T>);
 begin
@@ -78,9 +85,38 @@ begin
   ExecuteTask;
 end;
 
+procedure TSimpleQueue<T>.Clear;
+var
+  task: T;
+begin
+  FCS.Enter;
+  try
+    for task in FList do
+      task.free;
+
+    FList.Clear;
+
+  finally
+    FCS.Leave;
+  end;
+
+  if Assigned(FOnComplete) then
+    FOnComplete(nil, True, 'Queue is cleared');
+end;
+
 procedure TSimpleQueue<T>.ExecuteTask;
 begin
   InternalExecuteTask;
+end;
+
+function TSimpleQueue<T>.GetCount: Integer;
+begin
+  FCS.Enter;
+  try
+    Result := FList.Count;
+  finally
+    FCS.Leave;
+  end;
 end;
 
 procedure TSimpleQueue<T>.InternalExecuteTask;
@@ -143,7 +179,15 @@ end;
 procedure TSimpleQueueTask.ExecuteWrapper(AOnComplete:
     TSQTOnComplete<TSimpleQueueTask>);
 begin
-  Execute(AOnComplete);
+  try
+    Execute(AOnComplete);
+  except
+    on E: Exception do
+      if Assigned(AOnComplete) then
+        AOnComplete(self, False, E.message);
+
+
+  end;
 end;
 
 procedure TSimpleQueueThreadTask.ExecuteWrapper(AOnComplete:
