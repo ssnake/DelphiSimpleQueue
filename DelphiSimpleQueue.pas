@@ -9,13 +9,24 @@ uses
 
 type
   TSQTOnComplete<T> = procedure(sender: T; ASuccess: boolean; const AMsg: string) of object;
+  TSimpleQueueBundle = class(TObject)
+  private
+    FCS: TCriticalSection;
+    FDict: TDictionary<string, string>;
+    function GetParam(AName: string): string;
+    procedure SetParam(AName: string; const Value: string);
+  public
+    constructor Create;
+    destructor Destroy; override;
+    property Param[AName: string]: string read GetParam write SetParam; default;
+  end;
 
   TSimpleQueueTask = class
   public
-    procedure Execute(AOnComplete: TSQTOnComplete<TSimpleQueueTask>); virtual;
-        abstract;
-    procedure ExecuteWrapper(AOnComplete: TSQTOnComplete<TSimpleQueueTask>);
-        virtual;
+    procedure Execute(AOnComplete: TSQTOnComplete<TSimpleQueueTask>; ABundle:
+        TSimpleQueueBundle); virtual; abstract;
+    procedure ExecuteWrapper(AOnComplete: TSQTOnComplete<TSimpleQueueTask>;
+        ABundle: TSimpleQueueBundle); virtual;
   end;
 
   TSimpleQueue<T: TSimpleQueueTask> = class
@@ -30,19 +41,22 @@ type
     function GetNextTask: T;
     procedure OnInternalTaskComplete(sender: TSimpleQueueTask; ASuccess: boolean;
         const AMsg: string);
+  protected
+    FBundle: TSimpleQueueBundle;
   public
     constructor Create(AOnComplete: TSQTOnComplete<T>);
     destructor Destroy; override;
     procedure Add(ATask: T);
     procedure Clear;
+    property Bundle: TSimpleQueueBundle read FBundle;
     property Count: Integer read GetCount;
     property OnComplete: TSQTOnComplete<T> read FOnComplete write FOnComplete;
   end;
 
   TSimpleQueueThreadTask = class(TSimpleQueueTask)
   public
-    procedure ExecuteWrapper(AOnComplete: TSQTOnComplete<TSimpleQueueTask>);
-        override;
+    procedure ExecuteWrapper(AOnComplete: TSQTOnComplete<TSimpleQueueTask>;
+        ABundle: TSimpleQueueBundle); override;
   end;
 
   TThreadSimpleQueue<T: TSimpleQueueTask> = class(TSimpleQueue<T>)
@@ -51,6 +65,8 @@ type
   public
     constructor Create(AOnComplete: TSQTOnComplete<T>);
   end;
+
+
 
 implementation
 
@@ -65,10 +81,12 @@ begin
 
   FList := TList<T>.Create;
   FCS := TCriticalSection.Create;
+  FBundle := TSimpleQueueBundle.Create;
 end;
 
 destructor TSimpleQueue<T>.Destroy;
 begin
+  FBundle.free;
   FCS.Free;
   FList.Free;
   inherited;
@@ -139,7 +157,7 @@ begin
   end;
 
   if Assigned(task) then
-    task.executeWrapper(OnInternalTaskComplete);
+    task.executeWrapper(OnInternalTaskComplete, FBundle);
 
 
 
@@ -177,10 +195,10 @@ begin
 end;
 
 procedure TSimpleQueueTask.ExecuteWrapper(AOnComplete:
-    TSQTOnComplete<TSimpleQueueTask>);
+    TSQTOnComplete<TSimpleQueueTask>; ABundle: TSimpleQueueBundle);
 begin
   try
-    Execute(AOnComplete);
+    Execute(AOnComplete, ABundle);
   except
     on E: Exception do
       if Assigned(AOnComplete) then
@@ -191,11 +209,11 @@ begin
 end;
 
 procedure TSimpleQueueThreadTask.ExecuteWrapper(AOnComplete:
-    TSQTOnComplete<TSimpleQueueTask>);
+    TSQTOnComplete<TSimpleQueueTask>; ABundle: TSimpleQueueBundle);
 begin
   TThread.CreateAnonymousThread(procedure()
   begin
-    Execute(AOnComplete);
+    Execute(AOnComplete, ABundle);
   end).Start;
 end;
 
@@ -213,6 +231,39 @@ begin
   end).Start;
 
 
+end;
+
+constructor TSimpleQueueBundle.Create;
+begin
+  FCS := TCriticalSection.Create;
+  FDict := TDictionary<string,string>.Create;
+end;
+
+destructor TSimpleQueueBundle.Destroy;
+begin
+  FDict.Free;
+  FCS.Free;
+end;
+
+function TSimpleQueueBundle.GetParam(AName: string): string;
+begin
+  FCS.Enter;
+  try
+    FDict.TryGetValue(AName, Result);
+  finally
+    FCS.Leave;
+  end;
+end;
+
+procedure TSimpleQueueBundle.SetParam(AName: string; const Value: string);
+begin
+  FCS.Enter;
+  try
+    FDict.AddOrSetValue(AName, Value);
+
+  finally
+    FCS.Leave;
+  end;
 end;
 
 end.
