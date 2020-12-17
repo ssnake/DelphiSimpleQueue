@@ -9,6 +9,8 @@ uses
 
 type
   TSQTOnComplete<T> = procedure(sender: T; ASuccess: boolean; const AMsg: string) of object;
+  TSQTOnNotify<T> = procedure(sender: T; const AMsg: string) of object;
+
   TSimpleQueueBundle = class(TObject)
   private
     FCS: TCriticalSection;
@@ -24,9 +26,9 @@ type
   TSimpleQueueTask = class
   public
     procedure Execute(AOnComplete: TSQTOnComplete<TSimpleQueueTask>; ABundle:
-        TSimpleQueueBundle); virtual; abstract;
+        TSimpleQueueBundle; AOnNotify: TSQTOnNotify<TSimpleQueueTask>); virtual; abstract;
     procedure ExecuteWrapper(AOnComplete: TSQTOnComplete<TSimpleQueueTask>;
-        ABundle: TSimpleQueueBundle); virtual;
+        ABundle: TSimpleQueueBundle; AOnNotify: TSQTOnNotify<TSimpleQueueTask>); virtual;
   end;
 
   TSimpleQueue<T: TSimpleQueueTask> = class
@@ -35,6 +37,7 @@ type
     FCurrentTask: T;
     FOnComplete: TSQTOnComplete<T>;
     FList: TList<T>;
+    FOnNotify: TSQTOnNotify<TSimpleQueueTask>;
     procedure ExecuteTask; virtual;
     function GetCount: Integer;
     procedure InternalExecuteTask;
@@ -50,13 +53,15 @@ type
     procedure Clear;
     property Bundle: TSimpleQueueBundle read FBundle;
     property Count: Integer read GetCount;
+    property OnNotify: TSQTOnNotify<TSimpleQueueTask> read FOnNotify write
+        FOnNotify;
     property OnComplete: TSQTOnComplete<T> read FOnComplete write FOnComplete;
   end;
 
   TSimpleQueueThreadTask = class(TSimpleQueueTask)
   public
     procedure ExecuteWrapper(AOnComplete: TSQTOnComplete<TSimpleQueueTask>;
-        ABundle: TSimpleQueueBundle); override;
+        ABundle: TSimpleQueueBundle; AOnNotify: TSQTOnNotify<TSimpleQueueTask>); override;
   end;
 
   TThreadSimpleQueue<T: TSimpleQueueTask> = class(TSimpleQueue<T>)
@@ -157,7 +162,7 @@ begin
   end;
 
   if Assigned(task) then
-    task.executeWrapper(OnInternalTaskComplete, FBundle);
+    task.executeWrapper(OnInternalTaskComplete, FBundle, FOnNotify);
 
 
 
@@ -195,10 +200,10 @@ begin
 end;
 
 procedure TSimpleQueueTask.ExecuteWrapper(AOnComplete:
-    TSQTOnComplete<TSimpleQueueTask>; ABundle: TSimpleQueueBundle);
+    TSQTOnComplete<TSimpleQueueTask>; ABundle: TSimpleQueueBundle; AOnNotify: TSQTOnNotify<TSimpleQueueTask>);
 begin
   try
-    Execute(AOnComplete, ABundle);
+    Execute(AOnComplete, ABundle, AOnNotify);
   except
     on E: Exception do
       if Assigned(AOnComplete) then
@@ -209,11 +214,11 @@ begin
 end;
 
 procedure TSimpleQueueThreadTask.ExecuteWrapper(AOnComplete:
-    TSQTOnComplete<TSimpleQueueTask>; ABundle: TSimpleQueueBundle);
+    TSQTOnComplete<TSimpleQueueTask>; ABundle: TSimpleQueueBundle; AOnNotify: TSQTOnNotify<TSimpleQueueTask>);
 begin
   TThread.CreateAnonymousThread(procedure()
   begin
-    Execute(AOnComplete, ABundle);
+    Execute(AOnComplete, ABundle, AOnNotify);
   end).Start;
 end;
 
