@@ -29,6 +29,7 @@ type
         TSimpleQueueBundle; AOnNotify: TSQTOnNotify<TSimpleQueueTask>); virtual; abstract;
     procedure ExecuteWrapper(AOnComplete: TSQTOnComplete<TSimpleQueueTask>;
         ABundle: TSimpleQueueBundle; AOnNotify: TSQTOnNotify<TSimpleQueueTask>); virtual;
+    function Name: string; virtual;
   end;
 
   TSimpleQueue<T: TSimpleQueueTask> = class
@@ -37,6 +38,7 @@ type
     FCurrentTask: T;
     FOnComplete: TSQTOnComplete<T>;
     FList: TList<T>;
+    FOnNextTask: TNotifyEvent;
     FOnNotify: TSQTOnNotify<TSimpleQueueTask>;
     procedure ExecuteTask; virtual;
     function GetCount: Integer;
@@ -53,6 +55,7 @@ type
     procedure Clear;
     property Bundle: TSimpleQueueBundle read FBundle;
     property Count: Integer read GetCount;
+    property OnNextTask: TNotifyEvent read FOnNextTask write FOnNextTask;
     property OnNotify: TSQTOnNotify<TSimpleQueueTask> read FOnNotify write
         FOnNotify;
     property OnComplete: TSQTOnComplete<T> read FOnComplete write FOnComplete;
@@ -162,7 +165,15 @@ begin
   end;
 
   if Assigned(task) then
+  begin
+    if Assigned(FOnNextTask) then
+      FOnNextTask(task);
     task.executeWrapper(OnInternalTaskComplete, FBundle, FOnNotify);
+  end else
+  begin
+    if Assigned(FOnNextTask) then
+      FOnNextTask(nil);
+  end;
 
 
 
@@ -211,6 +222,11 @@ begin
 
 
   end;
+end;
+
+function TSimpleQueueTask.Name: string;
+begin
+  Result := self.ClassName;
 end;
 
 procedure TSimpleQueueThreadTask.ExecuteWrapper(AOnComplete:
