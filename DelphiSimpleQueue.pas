@@ -34,6 +34,7 @@ type
 
   TSimpleQueue<T: TSimpleQueueTask> = class
   private
+    FActive: Boolean;
     FCS: TCriticalSection;
     FCurrentTask: T;
     FOnComplete: TSQTOnComplete<T>;
@@ -46,6 +47,7 @@ type
     function GetNextTask: T;
     procedure OnInternalTaskComplete(sender: TSimpleQueueTask; ASuccess: boolean;
         const AMsg: string);
+    procedure SetActive(const Value: Boolean);
   protected
     FBundle: TSimpleQueueBundle;
   public
@@ -53,6 +55,7 @@ type
     destructor Destroy; override;
     procedure Add(ATask: T);
     procedure Clear;
+    property Active: Boolean read FActive write SetActive;
     property Bundle: TSimpleQueueBundle read FBundle;
     property Count: Integer read GetCount;
     property OnNextTask: TNotifyEvent read FOnNextTask write FOnNextTask;
@@ -90,13 +93,15 @@ begin
   FList := TList<T>.Create;
   FCS := TCriticalSection.Create;
   FBundle := TSimpleQueueBundle.Create;
+  FActive := True;
+
 end;
 
 destructor TSimpleQueue<T>.Destroy;
 begin
-  FBundle.free;
-  FCS.Free;
-  FList.Free;
+  FreeAndNil(FBundle);
+  FreeAndNil(FCS);
+  FreeAndNil(FList);
   inherited;
 end;
 
@@ -154,6 +159,8 @@ begin
 
   FCS.Enter;
   try
+    if not FActive then
+      exit;
     if Assigned(FCurrentTask) then
       exit;
     FCurrentTask := GetNextTask;
@@ -208,6 +215,24 @@ begin
     FCS.Leave;
   end;
   ExecuteTask;
+end;
+
+procedure TSimpleQueue<T>.SetActive(const Value: Boolean);
+var
+  execute: Boolean;
+begin
+  if not Assigned(FCS) then
+    exit;
+  execute := False;
+  FCS.Enter;
+  try
+    execute := Value and Value <> FActive;
+    FActive := Value;
+  finally
+    FCS.Leave;
+  end;
+  if execute then
+    ExecuteTask;
 end;
 
 procedure TSimpleQueueTask.ExecuteWrapper(AOnComplete:
