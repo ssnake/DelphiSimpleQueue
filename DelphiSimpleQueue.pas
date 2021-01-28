@@ -126,6 +126,8 @@ begin
       task.free;
 
     FList.Clear;
+    if Assigned(FCurrentTask) then
+      FreeAndNil(FCurrentTask);
 
   finally
     FCS.Leave;
@@ -207,7 +209,11 @@ begin
   if Assigned(FOnComplete) then
     FOnComplete(Sender, ASuccess, AMsg);
 
-  Sender.Free;
+  try
+    Sender.Free;
+  except
+  end;
+
   FCS.Enter;
   try
     FCurrentTask := nil;
